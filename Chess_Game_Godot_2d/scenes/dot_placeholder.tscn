@@ -1,9 +1,9 @@
-[gd_scene load_steps=2 format=3 uid="uid://bsyhe0htghv2t"]
+[gd_scene format=3 uid="uid://bsyhe0htghv2t"]
 
 [ext_resource type="Script" uid="uid://dm0ciaw1820pb" path="res://scripts/dot_placeholder.gd" id="1_4sd0q"]
 
-[node name="DotPlaceholder" type="ColorRect"]
-custom_minimum_size = Vector2(60, 60)
+[node name="DotPlaceholder" type="ColorRect" unique_id=975556265]
+custom_minimum_size = Vector2(96, 96)
 offset_left = -30.0
 offset_top = -30.0
 offset_right = 30.0

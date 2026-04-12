@@ -13,6 +13,10 @@ enum StateMachine {
 @export var white_team: CenterContainer = null
 @export var black_team: CenterContainer = null
 
+
+@onready var game_over_panel: Control = $"../GameOverCanvas/GameOverPanel"
+@onready var result_label: Label = $"../GameOverCanvas/GameOverPanel/VBoxContainer/ResultLabel"
+@onready var restart_button: Button = $"../GameOverCanvas/GameOverPanel/VBoxContainer/RestartButton"
 @onready var board: Array = []
 @onready var is_white: bool = true
 @onready var state: StateMachine = StateMachine.None
@@ -39,7 +43,16 @@ enum StateMachine {
 @onready var unique_board_moves: Array = []
 @onready var amount_same: Array = []
 
+@onready var game_over: bool = false
+@onready var game_result: String = ""
+
 func _ready() -> void:
+	if game_over_panel != null:
+		game_over_panel.hide()
+
+	if restart_button != null:
+		restart_button.pressed.connect(_on_restart_pressed)
+
 	white_team.hide()
 	black_team.hide()
 
@@ -80,7 +93,7 @@ func _ready() -> void:
 		Constants.KNIGHT_BLACK_ID,
 		Constants.ROOK_BLACK_ID
 	])
-
+	
 	display_board()
 
 	var buttons_white = get_tree().get_nodes_in_group("white_team")
@@ -93,6 +106,9 @@ func _ready() -> void:
 		button.pressed.connect(func(): _handle_option(button))
 
 func _input(event: InputEvent) -> void:
+	if game_over:
+		return
+
 	if event is InputEventMouseButton and promotion_square == null:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			if is_mouse_out_board():
@@ -157,9 +173,9 @@ func set_move(coord_y: int, coord_x: int):
 					elif selected_pieces.x == 0 and selected_pieces.y == 7:
 						rook_white_right = true
 				Constants.ROOK_BLACK_ID:
-					if selected_pieces.x == 0 and selected_pieces.y == 0:
+					if selected_pieces.x == 7 and selected_pieces.y == 0:
 						rook_black_left = true
-					elif selected_pieces.x == 0 and selected_pieces.y == 7:
+					elif selected_pieces.x == 7 and selected_pieces.y == 7:
 						rook_black_right = true
 				Constants.KING_WHITE_ID:
 					if selected_pieces.x == 0 and selected_pieces.y == 4:
@@ -213,22 +229,54 @@ func set_move(coord_y: int, coord_x: int):
 		display_options()
 		state = StateMachine.Moving
 	elif is_stalemate():
-		if is_white and is_check_king_position(king_white_position) or not is_white and is_check_king_position(king_black_position):
-			end_game()
+		if is_white and is_check_king_position(king_white_position):
+			end_game(false) # negras ganan
+		elif not is_white and is_check_king_position(king_black_position):
+			end_game(true) # blancas ganan
 		else:
-			draw_game()
+			draw_game("Tablas por ahogado")
 
-	if fifty_move_rules == Constants.MAX_MOVES:
-		draw_game()
-	
+	if fifty_move_rules >= Constants.MAX_MOVES:
+		draw_game("Tablas por regla de los 50 movimientos")
+		return
+
 	if insuficient_material():
-		draw_game()
+		draw_game("Tablas por material insuficiente")
+		return
+	
+func show_game_over(message: String) -> void:
+	if game_over_panel != null:
+		game_over_panel.show()
 
-func end_game():
-	print("checkmate -> stalemate")
+	if result_label != null:
+		result_label.text = message
 
-func draw_game():
-	print("draw")
+func end_game(winner_is_white: bool):
+	if game_over:
+		return
+
+	game_over = true
+	remove_dots()
+	hide_canvas()
+	state = StateMachine.None
+
+	game_result = "Jaque mate.\nGanan las blancas." if winner_is_white else "Jaque mate.\nGanan las negras."
+	show_game_over(game_result)
+
+func draw_game(reason: String = "Tablas"):
+	if game_over:
+		return
+
+	game_over = true
+	remove_dots()
+	hide_canvas()
+	state = StateMachine.None
+
+	game_result = reason
+	show_game_over(game_result)
+
+func _on_restart_pressed() -> void:
+	get_tree().reload_current_scene()
 
 func display_options() -> void:
 	moves = get_moves(selected_pieces)
@@ -683,30 +731,64 @@ func is_stalemate():
 
 	return true
 
-func insuficient_material():
-	var white_pieces = 0
-	var black_pieces = 0
-	
-	for i in Constants.BOARD_SIZE:
-		for j in Constants.BOARD_SIZE:
-			match board[i][j]:
-				Constants.KNIGHT_WHITE_ID, Constants.BISHOP_WHITE_ID:
-					if white_pieces == 0:
-						white_pieces += 1
-					else:
-						return false
-				Constants.KNIGHT_BLACK_ID, Constants.BISHOP_BLACK_ID:
-					if black_pieces == 0:
-						black_pieces += 1
-					else:
-						return false
-				Constants.KING_WHITE_ID, Constants.KING_BLACK_ID, 0:
+func insuficient_material() -> bool:
+	var white_minor: Array = []
+	var black_minor: Array = []
+
+	for row in Constants.BOARD_SIZE:
+		for col in Constants.BOARD_SIZE:
+			var piece = board[row][col]
+
+			match piece:
+				0, Constants.KING_WHITE_ID, Constants.KING_BLACK_ID:
 					pass
+
+				Constants.BISHOP_WHITE_ID:
+					white_minor.append({
+						"type": "bishop",
+						"square_color": get_square_color(Vector2i(row, col))
+					})
+
+				Constants.KNIGHT_WHITE_ID:
+					white_minor.append({
+						"type": "knight"
+					})
+
+				Constants.BISHOP_BLACK_ID:
+					black_minor.append({
+						"type": "bishop",
+						"square_color": get_square_color(Vector2i(row, col))
+					})
+
+				Constants.KNIGHT_BLACK_ID:
+					black_minor.append({
+						"type": "knight"
+					})
+
 				_:
+					# Si hay peones, torres o damas, no es material insuficiente
 					return false
 
-	return true
+	# Rey vs Rey
+	if white_minor.is_empty() and black_minor.is_empty():
+		return true
 
+	# Rey + pieza menor vs Rey
+	if white_minor.size() == 1 and black_minor.is_empty():
+		return true
+
+	if black_minor.size() == 1 and white_minor.is_empty():
+		return true
+
+	# Rey + alfil vs Rey + alfil, con ambos alfiles en el mismo color de casilla
+	if white_minor.size() == 1 and black_minor.size() == 1:
+		if white_minor[0]["type"] == "bishop" and black_minor[0]["type"] == "bishop":
+			return white_minor[0]["square_color"] == black_minor[0]["square_color"]
+
+	return false
+func get_square_color(pos: Vector2i) -> int:
+	# 0 = clara, 1 = oscura
+	return (pos.x + pos.y) % 2
 func threefold_position(_board: Array):
 	for i in unique_board_moves.size():
 		if _board == unique_board_moves[i]:

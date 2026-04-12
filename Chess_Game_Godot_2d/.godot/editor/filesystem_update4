@@ -1,0 +1,5 @@
+res://scenes/main_scene.tscn
+res://scripts/constants.gd
+res://scenes/dot_placeholder.tscn
+res://scripts/board.gd
+res://scenes/board_scene.tscn
