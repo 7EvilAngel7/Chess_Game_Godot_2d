@@ -13,6 +13,17 @@ enum StateMachine {
 @export var white_team: CenterContainer = null
 @export var black_team: CenterContainer = null
 
+# 5 minutos en segundos (5 * 60)
+var white_time: float = 300.0
+var black_time: float = 300.0
+
+# Variables para la captura de las piezas
+@export var white_captured_container: GridContainer = null
+@export var black_captured_container: GridContainer = null
+
+# Referencias a las etiquetas de texto en tu interfaz
+@export var white_time_label: Label = null
+@export var black_time_label: Label = null
 
 @onready var game_over_panel: Control = $"../GameOverCanvas/GameOverPanel"
 @onready var result_label: Label = $"../GameOverCanvas/GameOverPanel/VBoxContainer/ResultLabel"
@@ -45,6 +56,55 @@ enum StateMachine {
 
 @onready var game_over: bool = false
 @onready var game_result: String = ""
+
+func _process(delta: float) -> void:
+	# Si el juego ya terminó, el reloj no avanza
+	if game_over:
+		return
+
+	# Restamos el tiempo dependiendo de quién es el turno
+	if is_white:
+		white_time -= delta
+		if white_time <= 0:
+			white_time = 0
+			end_game_by_timeout(false) # Ganan las negras porque a las blancas se les acabó el tiempo
+	else:
+		black_time -= delta
+		if black_time <= 0:
+			black_time = 0
+			end_game_by_timeout(true) # Ganan las blancas porque a las negras se les acabó el tiempo
+
+	# Actualizamos los textos en pantalla
+	update_time_labels()
+
+# --- FUNCIONES PARA EL TEMPORIZADOR ---
+
+func update_time_labels() -> void:
+	if white_time_label != null:
+		white_time_label.text = format_time(white_time)
+	if black_time_label != null:
+		black_time_label.text = format_time(black_time)
+
+func format_time(time_in_seconds: float) -> String:
+	# Convertimos los segundos totales en minutos y segundos
+	var minutes: int = int(time_in_seconds) / 60
+	var seconds: int = int(time_in_seconds) % 60
+	
+	# Le damos formato de dos dígitos (ej. 05:09)
+	return "%02d:%02d" % [minutes, seconds]
+
+func end_game_by_timeout(winner_is_white: bool) -> void:
+	if game_over:
+		return
+
+	game_over = true
+	remove_dots()
+	hide_canvas()
+	state = StateMachine.None
+
+	# Mostramos un mensaje específico de que fue por tiempo
+	game_result = "Tiempo agotado.\nGanan las blancas." if winner_is_white else "Tiempo agotado.\nGanan las negras."
+	show_game_over(game_result)
 
 func _ready() -> void:
 	if game_over_panel != null:
@@ -154,7 +214,12 @@ func set_move(coord_y: int, coord_x: int):
 						just_now = true
 					elif en_passant != null:
 						if en_passant.y == i.y and selected_pieces.y != i.y and en_passant.x == selected_pieces.x:
+							# Lógica extra para registrar la captura al paso en el UI si es necesario
+							var pieza_al_paso = board[en_passant.x][en_passant.y]
+							if pieza_al_paso != 0:
+								registrar_pieza_capturada(pieza_al_paso)
 							board[en_passant.x][en_passant.y] = 0
+							
 				Constants.PAWN_BLACK_ID:
 					fifty_move_rules = 0
 
@@ -166,7 +231,12 @@ func set_move(coord_y: int, coord_x: int):
 						just_now = true
 					elif en_passant != null:
 						if en_passant.y == i.y and selected_pieces.y != i.y and en_passant.x == selected_pieces.x:
+							# Lógica extra para registrar la captura al paso en el UI si es necesario
+							var pieza_al_paso = board[en_passant.x][en_passant.y]
+							if pieza_al_paso != 0:
+								registrar_pieza_capturada(pieza_al_paso)
 							board[en_passant.x][en_passant.y] = 0
+							
 				Constants.ROOK_WHITE_ID:
 					if selected_pieces.x == 0 and selected_pieces.y == 0:
 						rook_white_left = true
@@ -213,6 +283,12 @@ func set_move(coord_y: int, coord_x: int):
 
 			if not just_now:
 				en_passant = null
+
+			# --- LÓGICA DE PIEZAS CAPTURADAS ---
+			var pieza_en_destino = board[coord_y][coord_x]
+			if pieza_en_destino != 0:
+				registrar_pieza_capturada(pieza_en_destino)
+			# -----------------------------------
 
 			board[coord_y][coord_x] = board[selected_pieces.x][selected_pieces.y]
 			board[selected_pieces.x][selected_pieces.y] = 0
@@ -796,9 +872,11 @@ func insuficient_material() -> bool:
 			return white_minor[0]["square_color"] == black_minor[0]["square_color"]
 
 	return false
+
 func get_square_color(pos: Vector2i) -> int:
 	# 0 = clara, 1 = oscura
 	return (pos.x + pos.y) % 2
+
 func threefold_position(_board: Array):
 	for i in unique_board_moves.size():
 		if _board == unique_board_moves[i]:
@@ -810,3 +888,45 @@ func threefold_position(_board: Array):
 
 	unique_board_moves.append(_board.duplicate_deep())
 	amount_same.append(1)
+
+# --- NUEVAS FUNCIONES PARA EL REGISTRO DE PIEZAS CAPTURADAS ---
+
+func registrar_pieza_capturada(id_pieza: int):
+	# Creamos un nodo de textura para mostrar la pieza pequeñita
+	var icono = TextureRect.new()
+	
+	# Obtenemos la textura correcta usando tu lógica de IDs
+	icono.texture = obtener_textura_por_id(id_pieza)
+	
+	if icono.texture == null:
+		return
+		
+	# Configuramos el tamaño del icono (ej. 120x120 para que no ocupen mucho espacio pero que si se vean)
+	icono.custom_minimum_size = Vector2(150, 150)
+	icono.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icono.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+
+	# Si el ID es positivo, es una pieza blanca (la capturaron las negras)
+	if id_pieza > 0:
+		if white_captured_container != null:
+			white_captured_container.add_child(icono)
+	else:
+		if black_captured_container != null:
+			black_captured_container.add_child(icono)
+
+# Función auxiliar para obtener la textura sin usar el nodo principal
+func obtener_textura_por_id(id: int) -> Texture2D:
+	match id:
+		Constants.PAWN_WHITE_ID: return Constants.PAWN_WHITE
+		Constants.ROOK_WHITE_ID: return Constants.ROOK_WHITE
+		Constants.KNIGHT_WHITE_ID: return Constants.KNIGHT_WHITE
+		Constants.BISHOP_WHITE_ID: return Constants.BISHOP_WHITE
+		Constants.QUEEN_WHITE_ID: return Constants.QUEEN_WHITE
+		Constants.KING_WHITE_ID: return Constants.KING_WHITE
+		Constants.PAWN_BLACK_ID: return Constants.PAWN_BLACK
+		Constants.ROOK_BLACK_ID: return Constants.ROOK_BLACK
+		Constants.KNIGHT_BLACK_ID: return Constants.KNIGHT_BLACK
+		Constants.BISHOP_BLACK_ID: return Constants.BISHOP_BLACK
+		Constants.QUEEN_BLACK_ID: return Constants.QUEEN_BLACK
+		Constants.KING_BLACK_ID: return Constants.KING_BLACK
+	return null
