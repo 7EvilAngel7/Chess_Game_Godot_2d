@@ -621,6 +621,9 @@ func display_board() -> void:
 	for child in pieces.get_children():
 		child.queue_free()
 
+	# Definimos nuestra medida objetivo (puedes ponerla arriba en tu script si prefieres)
+	var tamano_objetivo = Vector2(60.0, 60.0)
+
 	for row in Constants.BOARD_SIZE:
 		for col in Constants.BOARD_SIZE:
 			var holder: Sprite2D = Constants.TEXUTE_PLACEHOLDER.instantiate()
@@ -659,6 +662,13 @@ func display_board() -> void:
 					holder.texture = Constants.QUEEN_BLACK
 				Constants.KING_BLACK_ID:
 					holder.texture = Constants.KING_BLACK
+
+			# --- NUEVA LÓGICA DE ESCALADO ---
+			# Verificamos que la casilla tenga una textura asignada (que no sea un 0 / espacio vacío)
+			if holder.texture != null:
+				var tamano_textura = holder.texture.get_size()
+				# Calculamos la escala dividiendo el objetivo (60x60) entre el tamaño real de la imagen cargada
+				holder.scale = tamano_objetivo / tamano_textura
 
 	turn.color = Constants.WHITE_COLOR if is_white else Constants.BLACK_COLOR
 
