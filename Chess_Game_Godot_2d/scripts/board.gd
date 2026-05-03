@@ -17,6 +17,9 @@ enum StateMachine {
 var white_time: float = 300.0
 var black_time: float = 300.0
 
+# Modo Online Activado
+var online_mode: bool = true
+
 # Variables para la captura de las piezas
 @export var white_captured_container: GridContainer = null
 @export var black_captured_container: GridContainer = null
@@ -57,6 +60,21 @@ var black_time: float = 300.0
 @onready var game_over: bool = false
 @onready var game_result: String = ""
 
+
+func can_play_local_turn() -> bool:
+	if not online_mode:
+		return true
+
+	# Blancas
+	if is_white and NetworkManager.my_color == 1:
+		return true
+
+	# Negras
+	if not is_white and NetworkManager.my_color == -1:
+		return true
+
+	return false
+	
 func _process(delta: float) -> void:
 	# Si el juego ya terminó, el reloj no avanza
 	if game_over:
@@ -168,7 +186,9 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	if game_over:
 		return
-
+	if online_mode and not can_play_local_turn():
+		return
+		
 	if event is InputEventMouseButton and promotion_square == null:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			if is_mouse_out_board():
@@ -184,8 +204,20 @@ func _input(event: InputEvent) -> void:
 				display_options()
 				state = StateMachine.Moving
 			elif state == StateMachine.Moving:
-				set_move(coord_y, coord_x)
+				request_move(selected_pieces, Vector2i(coord_y, coord_x))
 
+func request_move(from: Vector2i, to: Vector2i) -> void:
+	if not online_mode:
+		selected_pieces = from
+		set_move(to.x, to.y)
+		return
+
+	# Si soy el servidor/host, valido directamente
+	if multiplayer.is_server():
+		server_receive_move(from.x, from.y, to.x, to.y, multiplayer.get_unique_id())
+	else:
+		server_receive_move.rpc_id(1, from.x, from.y, to.x, to.y, multiplayer.get_unique_id())
+		
 func remove_dots():
 	position_enemies = []
 
@@ -300,7 +332,9 @@ func set_move(coord_y: int, coord_x: int):
 	remove_dots()
 	state = StateMachine.Moved
 
-	if (selected_pieces.x != coord_y or selected_pieces.y != coord_x) and (is_white and board[coord_y][coord_x] > 0 or not is_white and board[coord_y][coord_x] < 0):
+	if online_mode:
+		state = StateMachine.Moved
+	elif (selected_pieces.x != coord_y or selected_pieces.y != coord_x) and (is_white and board[coord_y][coord_x] > 0 or not is_white and board[coord_y][coord_x] < 0):
 		selected_pieces = Vector2i(coord_y, coord_x)
 		display_options()
 		state = StateMachine.Moving
@@ -883,8 +917,8 @@ func threefold_position(_board: Array):
 			amount_same[i] += 1
 
 			if amount_same[i] >= 3:
-				draw_game()
-				return
+				draw_game("Tablas por triple repetición")
+			return
 
 	unique_board_moves.append(_board.duplicate_deep())
 	amount_same.append(1)
@@ -930,3 +964,54 @@ func obtener_textura_por_id(id: int) -> Texture2D:
 		Constants.QUEEN_BLACK_ID: return Constants.QUEEN_BLACK
 		Constants.KING_BLACK_ID: return Constants.KING_BLACK
 	return null
+@rpc("any_peer", "reliable")
+func server_receive_move(from_y: int, from_x: int, to_y: int, to_x: int, sender_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+
+	var from := Vector2i(from_y, from_x)
+	var to := Vector2i(to_y, to_x)
+
+	# Validar que el jugador mueva su color correcto
+	var expected_color := 1 if is_white else -1
+
+	if not NetworkManager.player_colors.has(sender_id):
+		return
+
+	if NetworkManager.player_colors[sender_id] != expected_color:
+		print("Movimiento rechazado: no es el turno de ese jugador.")
+		return
+
+	# Validar que la pieza pertenezca al jugador
+	var piece = board[from.x][from.y]
+
+	if expected_color == 1 and piece <= 0:
+		print("Movimiento rechazado: no es pieza blanca.")
+		return
+
+	if expected_color == -1 and piece >= 0:
+		print("Movimiento rechazado: no es pieza negra.")
+		return
+
+	# Validar movimiento usando tu lógica actual
+	selected_pieces = from
+	moves = get_moves(selected_pieces)
+
+	var valid := false
+
+	for move in moves:
+		if move == to:
+			valid = true
+			break
+
+	if not valid:
+		print("Movimiento ilegal rechazado.")
+		return
+
+	# Si es válido, se aplica en el servidor y en todos los clientes
+	apply_confirmed_move.rpc(from.x, from.y, to.x, to.y)
+	
+@rpc("authority", "call_local", "reliable")
+func apply_confirmed_move(from_y: int, from_x: int, to_y: int, to_x: int) -> void:
+	selected_pieces = Vector2i(from_y, from_x)
+	set_move(to_y, to_x)
