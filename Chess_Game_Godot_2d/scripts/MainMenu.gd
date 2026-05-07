@@ -34,7 +34,7 @@ func _on_join_pressed() -> void:
 
 func _on_player_assigned() -> void:
 	print("Entrando a la escena del juego...")
-	get_tree().change_scene_to_file("res://scenes/main/Game.tscn")
+	get_tree().change_scene_to_file("res://scenes/main_scene.tscn")
 
 
 func _on_connection_failed() -> void:
