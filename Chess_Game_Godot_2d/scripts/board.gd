@@ -20,6 +20,11 @@ var black_time: float = 300.0
 # Modo Online Activado
 var online_mode: bool = true
 
+var flip_board: bool = false
+
+var white_captured_pieces: Array[int] = []
+var black_captured_pieces: Array[int] = []
+
 # Variables para la captura de las piezas
 @export var white_captured_container: GridContainer = null
 @export var black_captured_container: GridContainer = null
@@ -77,26 +82,25 @@ func can_play_local_turn() -> bool:
 	return false
 	
 func _process(delta: float) -> void:
-	# Si el juego ya terminó, el reloj no avanza
 	if game_over:
 		return
 
-	# Restamos el tiempo dependiendo de quién es el turno
+	if online_mode and not multiplayer.is_server():
+		update_time_labels()
+		return
+
 	if is_white:
 		white_time -= delta
 		if white_time <= 0:
 			white_time = 0
-			end_game_by_timeout(false) # Ganan las negras porque a las blancas se les acabó el tiempo
+			end_game_by_timeout(false)
 	else:
 		black_time -= delta
 		if black_time <= 0:
 			black_time = 0
-			end_game_by_timeout(true) # Ganan las blancas porque a las negras se les acabó el tiempo
+			end_game_by_timeout(true)
 
-	# Actualizamos los textos en pantalla
 	update_time_labels()
-
-# --- FUNCIONES PARA EL TEMPORIZADOR ---
 
 func update_time_labels() -> void:
 	if white_time_label != null:
@@ -121,11 +125,17 @@ func end_game_by_timeout(winner_is_white: bool) -> void:
 	hide_canvas()
 	state = StateMachine.None
 
-	# Mostramos un mensaje específico de que fue por tiempo
 	game_result = "Tiempo agotado.\nGanan las blancas." if winner_is_white else "Tiempo agotado.\nGanan las negras."
 	show_game_over(game_result)
 
+	if online_mode and multiplayer.is_server():
+		sync_game_state.rpc(get_game_state())
+
 func _ready() -> void:
+	if NetworkManager.my_color == -1:
+		flip_board = true
+	else:
+		flip_board = false
 	if game_over_panel != null:
 		game_over_panel.hide()
 
@@ -174,7 +184,11 @@ func _ready() -> void:
 	])
 	
 	display_board()
+	
 
+	if online_mode and multiplayer.is_server():
+		await get_tree().create_timer(0.5).timeout
+		sync_game_state.rpc(get_game_state())
 	var buttons_white = get_tree().get_nodes_in_group("white_team")
 	var buttons_black = get_tree().get_nodes_in_group("black_team")
 
@@ -187,38 +201,95 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	if game_over:
 		return
+
 	if online_mode and not can_play_local_turn():
 		return
-		
+
 	if event is InputEventMouseButton and promotion_square == null:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			if is_mouse_out_board():
 				return
 
-			var mouse = get_global_mouse_position()
-			var coord_x = snapped(mouse.x, 0) / Constants.CELL_WIDTH
-			var coord_y = abs(snapped(mouse.y, 0)) / Constants.CELL_WIDTH
+			var board_pos: Vector2i = mouse_to_board_position()
+
+			var coord_y: int = board_pos.x
+			var coord_x: int = board_pos.y
+
 			var selected = board[coord_y][coord_x]
 
-			if (state == StateMachine.Moved or state == StateMachine.None) and (is_white && selected > 0 or !is_white && selected < 0):
-				selected_pieces = Vector2i(coord_y, coord_x)
-				display_options()
-				state = StateMachine.Moving
-			elif state == StateMachine.Moving:
-				request_move(selected_pieces, Vector2i(coord_y, coord_x))
+			if state == StateMachine.Moved or state == StateMachine.None:
+				if is_current_player_piece(selected):
+					selected_pieces = Vector2i(coord_y, coord_x)
+					display_options()
+					state = StateMachine.Moving
+				return
 
+			if state == StateMachine.Moving:
+				if is_current_player_piece(selected):
+					remove_dots()
+					selected_pieces = Vector2i(coord_y, coord_x)
+					display_options()
+					state = StateMachine.Moving
+					return
+
+				var target := Vector2i(coord_y, coord_x)
+
+				if moves.has(target):
+					request_move(selected_pieces, target)
+				else:
+					remove_dots()
+					state = StateMachine.Moved
+func mouse_to_board_position() -> Vector2i:
+	var mouse := get_global_mouse_position()
+
+	var visual_col: int = int(floor(mouse.x / Constants.CELL_WIDTH))
+	var visual_row: int = int(floor(abs(mouse.y) / Constants.CELL_WIDTH))
+
+	var board_row: int = visual_row
+	var board_col: int = visual_col
+
+	if flip_board:
+		board_row = Constants.BOARD_SIZE - 1 - visual_row
+		board_col = Constants.BOARD_SIZE - 1 - visual_col
+
+	return Vector2i(board_row, board_col)
+	
+func is_current_player_piece(piece_id: int) -> bool:
+	if piece_id == 0:
+		return false
+
+	if is_white and piece_id > 0:
+		return true
+
+	if not is_white and piece_id < 0:
+		return true
+
+	return false
+	
+	
+func board_to_screen_position(row: int, col: int) -> Vector2:
+	var visual_row: int = row
+	var visual_col: int = col
+
+	if flip_board:
+		visual_row = Constants.BOARD_SIZE - 1 - row
+		visual_col = Constants.BOARD_SIZE - 1 - col
+
+	return Vector2(
+		visual_col * Constants.CELL_WIDTH + Constants.CELL_WIDTH / 2,
+		-visual_row * Constants.CELL_WIDTH - Constants.CELL_WIDTH / 2
+	)
+	
 func request_move(from: Vector2i, to: Vector2i) -> void:
 	if not online_mode:
 		selected_pieces = from
 		set_move(to.x, to.y)
 		return
 
-	# Si soy el servidor/host, valido directamente
 	if multiplayer.is_server():
-		server_receive_move(from.x, from.y, to.x, to.y, multiplayer.get_unique_id())
+		server_receive_move(from.x, from.y, to.x, to.y)
 	else:
-		server_receive_move.rpc_id(1, from.x, from.y, to.x, to.y, multiplayer.get_unique_id())
-		
+		server_receive_move.rpc_id(1, from.x, from.y, to.x, to.y)
 func remove_dots():
 	position_enemies = []
 
@@ -374,6 +445,9 @@ func end_game(winner_is_white: bool):
 	game_result = "Jaque mate.\nGanan las blancas." if winner_is_white else "Jaque mate.\nGanan las negras."
 	show_game_over(game_result)
 
+	if online_mode and multiplayer.is_server():
+		sync_game_state.rpc(get_game_state())
+
 func draw_game(reason: String = "Tablas"):
 	if game_over:
 		return
@@ -386,6 +460,9 @@ func draw_game(reason: String = "Tablas"):
 	game_result = reason
 	show_game_over(game_result)
 
+	if online_mode and multiplayer.is_server():
+		sync_game_state.rpc(get_game_state())
+
 func _on_restart_pressed() -> void:
 	get_tree().reload_current_scene()
 
@@ -397,7 +474,19 @@ func display_options() -> void:
 		return
 
 	display_dots()
+func board_to_screen_square(row: int, col: int) -> Vector2:
+	var visual_row: int = row
+	var visual_col: int = col
 
+	if flip_board:
+		visual_row = Constants.BOARD_SIZE - 1 - row
+		visual_col = Constants.BOARD_SIZE - 1 - col
+
+	return Vector2(
+		visual_col * Constants.CELL_WIDTH,
+		-visual_row * Constants.CELL_WIDTH - Constants.CELL_WIDTH
+	)
+	
 func display_dots() -> void:
 	for i in moves:
 		var holder: DotPlaceholder = Constants.DOT_PLACEHOLDER.instantiate()
@@ -406,11 +495,9 @@ func display_dots() -> void:
 			holder.can_destory = true
 
 		dots.add_child(holder)
-		holder.global_position = Vector2(
-			i.y * Constants.CELL_WIDTH,
-			-i.x * Constants.CELL_WIDTH - Constants.CELL_WIDTH
-		)
 
+		# Misma alineación de antes, pero con soporte para tablero invertido
+		holder.global_position = board_to_screen_square(i.x, i.y)
 func get_moves(selected: Vector2i) -> Array:
 	var _moves = []
 
@@ -689,8 +776,16 @@ func is_enemy(pos: Vector2i):
 	return false
 
 func upgade_pawn(pos: Vector2i):
-	promotion_square = pos
+	if online_mode:
+		if is_white:
+			board[pos.x][pos.y] = Constants.QUEEN_WHITE_ID
+		else:
+			board[pos.x][pos.y] = Constants.QUEEN_BLACK_ID
 
+		promotion_square = null
+		return
+
+	promotion_square = pos
 	show_canvas()
 
 func _handle_option(button: Button) -> void:
@@ -723,28 +818,35 @@ func hide_canvas():
 	black_team.hide()
 
 func is_mouse_out_board() -> bool:
-	if get_rect().has_point(to_local(get_global_mouse_position())):
-		return false
+	var mouse := get_global_mouse_position()
 
-	return true
+	var min_x := 0.0
+	var max_x := Constants.BOARD_SIZE * Constants.CELL_WIDTH
 
+	var min_y := -Constants.BOARD_SIZE * Constants.CELL_WIDTH
+	var max_y := 0.0
+
+	if mouse.x < min_x or mouse.x >= max_x:
+		return true
+
+	if mouse.y < min_y or mouse.y >= max_y:
+		return true
+
+	return false
 func display_board() -> void:
 	for child in pieces.get_children():
 		child.queue_free()
 
-	# Definimos nuestra medida objetivo (puedes ponerla arriba en tu script si prefieres)
-	var tamano_objetivo = Vector2(60.0, 60.0)
+	var tamano_objetivo := Vector2(60.0, 60.0)
 
 	for row in Constants.BOARD_SIZE:
 		for col in Constants.BOARD_SIZE:
 			var holder: Sprite2D = Constants.TEXUTE_PLACEHOLDER.instantiate()
 
 			pieces.add_child(holder)
-			@warning_ignore("integer_division")
-			holder.global_position = Vector2(
-				col * Constants.CELL_WIDTH + (Constants.CELL_WIDTH / 2),
-				-row * Constants.CELL_WIDTH - (Constants.CELL_WIDTH / 2)
-			)
+
+			# Posición visual según el color del jugador
+			holder.global_position = board_to_screen_position(row, col)
 
 			match board[row][col]:
 				Constants.PAWN_WHITE_ID:
@@ -774,15 +876,17 @@ func display_board() -> void:
 				Constants.KING_BLACK_ID:
 					holder.texture = Constants.KING_BLACK
 
-			# --- NUEVA LÓGICA DE ESCALADO ---
-			# Verificamos que la casilla tenga una textura asignada (que no sea un 0 / espacio vacío)
 			if holder.texture != null:
-				var tamano_textura = holder.texture.get_size()
-				# Calculamos la escala dividiendo el objetivo (60x60) entre el tamaño real de la imagen cargada
+				var tamano_textura := holder.texture.get_size()
+
+				holder.centered = true
+				holder.offset = Vector2.ZERO
 				holder.scale = tamano_objetivo / tamano_textura
 
-	turn.color = Constants.WHITE_COLOR if is_white else Constants.BLACK_COLOR
+				# Gira visualmente las piezas para el jugador negro
+				holder.rotation_degrees = 180 if flip_board else 0
 
+	turn.color = Constants.WHITE_COLOR if is_white else Constants.BLACK_COLOR
 func is_check_king_position(king_position: Vector2i) -> bool:
 	# TODO: refactor here -> move direction vectors to constant file
 	var directions = Constants.KING_DIRECTIONS
@@ -925,31 +1029,51 @@ func threefold_position(_board: Array):
 	amount_same.append(1)
 
 # --- NUEVAS FUNCIONES PARA EL REGISTRO DE PIEZAS CAPTURADAS ---
+func crear_icono_captura(id_pieza: int, container: GridContainer) -> void:
+	if container == null:
+		return
 
-func registrar_pieza_capturada(id_pieza: int):
-	# Creamos un nodo de textura para mostrar la pieza pequeñita
-	var icono = TextureRect.new()
-	
-	# Obtenemos la textura correcta usando tu lógica de IDs
+	var icono := TextureRect.new()
 	icono.texture = obtener_textura_por_id(id_pieza)
-	
+
 	if icono.texture == null:
 		return
-		
-	# Configuramos el tamaño del icono (ej. 120x120 para que no ocupen mucho espacio pero que si se vean)
-	icono.custom_minimum_size = Vector2(150, 150)
+
+	icono.custom_minimum_size = Vector2(60, 60)
 	icono.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icono.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 
-	# Si el ID es positivo, es una pieza blanca (la capturaron las negras)
-	if id_pieza > 0:
-		if white_captured_container != null:
-			white_captured_container.add_child(icono)
-	else:
-		if black_captured_container != null:
-			black_captured_container.add_child(icono)
+	container.add_child(icono)
+	
+func actualizar_piezas_capturadas() -> void:
+	if white_captured_container != null:
+		for child in white_captured_container.get_children():
+			child.queue_free()
 
-# Función auxiliar para obtener la textura sin usar el nodo principal
+	if black_captured_container != null:
+		for child in black_captured_container.get_children():
+			child.queue_free()
+
+	for id_pieza in white_captured_pieces:
+		crear_icono_captura(id_pieza, white_captured_container)
+
+	for id_pieza in black_captured_pieces:
+		crear_icono_captura(id_pieza, black_captured_container)
+		
+func registrar_pieza_capturada(id_pieza: int):
+	if id_pieza == 0:
+		return
+
+	# Guardamos la pieza capturada en arrays sincronizables
+	if id_pieza > 0:
+		# Pieza blanca capturada
+		white_captured_pieces.append(id_pieza)
+	else:
+		# Pieza negra capturada
+		black_captured_pieces.append(id_pieza)
+
+	actualizar_piezas_capturadas()
+	
 func obtener_textura_por_id(id: int) -> Texture2D:
 	match id:
 		Constants.PAWN_WHITE_ID: return Constants.PAWN_WHITE
@@ -965,36 +1089,66 @@ func obtener_textura_por_id(id: int) -> Texture2D:
 		Constants.QUEEN_BLACK_ID: return Constants.QUEEN_BLACK
 		Constants.KING_BLACK_ID: return Constants.KING_BLACK
 	return null
+
+func get_game_state() -> Dictionary:
+	return {
+		"board": board.duplicate_deep(),
+		"is_white": is_white,
+		"white_time": white_time,
+		"black_time": black_time,
+		"king_white_position": king_white_position,
+		"king_black_position": king_black_position,
+		"king_white": king_white,
+		"king_black": king_black,
+		"rook_white_left": rook_white_left,
+		"rook_white_right": rook_white_right,
+		"rook_black_left": rook_black_left,
+		"rook_black_right": rook_black_right,
+		"en_passant": en_passant,
+		"fifty_move_rules": fifty_move_rules,
+		"game_over": game_over,
+		"game_result": game_result,
+		"white_captured_pieces": white_captured_pieces.duplicate(),
+		"black_captured_pieces": black_captured_pieces.duplicate()
+	}
+	
 @rpc("any_peer", "reliable")
-func server_receive_move(from_y: int, from_x: int, to_y: int, to_x: int, sender_id: int) -> void:
+func server_receive_move(from_y: int, from_x: int, to_y: int, to_x: int) -> void:
 	if not multiplayer.is_server():
 		return
+
+	var sender_id := multiplayer.get_remote_sender_id()
+
+	if sender_id == 0:
+		sender_id = 1
 
 	var from := Vector2i(from_y, from_x)
 	var to := Vector2i(to_y, to_x)
 
-	# Validar que el jugador mueva su color correcto
 	var expected_color := 1 if is_white else -1
 
 	if not NetworkManager.player_colors.has(sender_id):
+		print("Movimiento rechazado: jugador no registrado. ID: ", sender_id)
+		sync_game_state.rpc(get_game_state())
 		return
 
 	if NetworkManager.player_colors[sender_id] != expected_color:
 		print("Movimiento rechazado: no es el turno de ese jugador.")
+		sync_game_state.rpc(get_game_state())
 		return
 
-	# Validar que la pieza pertenezca al jugador
 	var piece = board[from.x][from.y]
 
 	if expected_color == 1 and piece <= 0:
 		print("Movimiento rechazado: no es pieza blanca.")
+		sync_game_state.rpc(get_game_state())
 		return
 
 	if expected_color == -1 and piece >= 0:
 		print("Movimiento rechazado: no es pieza negra.")
+		sync_game_state.rpc(get_game_state())
 		return
 
-	# Validar movimiento usando tu lógica actual
 	selected_pieces = from
 	moves = get_moves(selected_pieces)
 
@@ -1007,12 +1161,53 @@ func server_receive_move(from_y: int, from_x: int, to_y: int, to_x: int, sender_
 
 	if not valid:
 		print("Movimiento ilegal rechazado.")
+		sync_game_state.rpc(get_game_state())
 		return
 
-	# Si es válido, se aplica en el servidor y en todos los clientes
-	apply_confirmed_move.rpc(from.x, from.y, to.x, to.y)
-	
+	selected_pieces = from
+	set_move(to.x, to.y)
+
+	sync_game_state.rpc(get_game_state())
+
 @rpc("authority", "call_local", "reliable")
-func apply_confirmed_move(from_y: int, from_x: int, to_y: int, to_x: int) -> void:
-	selected_pieces = Vector2i(from_y, from_x)
-	set_move(to_y, to_x)
+func sync_game_state(state_data: Dictionary) -> void:
+	board = state_data["board"].duplicate_deep()
+
+	is_white = state_data["is_white"]
+	white_time = state_data["white_time"]
+	black_time = state_data["black_time"]
+
+	king_white_position = state_data["king_white_position"]
+	king_black_position = state_data["king_black_position"]
+
+	king_white = state_data["king_white"]
+	king_black = state_data["king_black"]
+
+	rook_white_left = state_data["rook_white_left"]
+	rook_white_right = state_data["rook_white_right"]
+	rook_black_left = state_data["rook_black_left"]
+	rook_black_right = state_data["rook_black_right"]
+
+	en_passant = state_data["en_passant"]
+	fifty_move_rules = state_data["fifty_move_rules"]
+
+	game_over = state_data["game_over"]
+	game_result = state_data["game_result"]
+
+	white_captured_pieces = state_data["white_captured_pieces"].duplicate()
+	black_captured_pieces = state_data["black_captured_pieces"].duplicate()
+	remove_dots()
+	moves.clear()
+	position_enemies.clear()
+	promotion_square = null
+
+	state = StateMachine.Moved
+
+	display_board()
+	update_time_labels()
+	actualizar_piezas_capturadas()
+	if game_over:
+		show_game_over(game_result)
+	else:
+		if game_over_panel != null:
+			game_over_panel.hide()

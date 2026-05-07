@@ -25,8 +25,8 @@ NetworkManager="*uid://bc5rv430dpm2q"
 
 [display]
 
-window/size/viewport_width=2000
-window/size/viewport_height=2400
+window/size/viewport_width=1600
+window/size/viewport_height=1800
 window/stretch/mode="canvas_items"
 
 [dotnet]
