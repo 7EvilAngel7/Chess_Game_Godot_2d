@@ -87,11 +87,15 @@ texture = ExtResource("9_c1pb6")
 
 [node name="Main" type="Node2D" unique_id=1624583338]
 
-[node name="Board" parent="." unique_id=418213542 node_paths=PackedStringArray("white_team", "black_team") instance=ExtResource("1_w2twt")]
+[node name="Board" parent="." unique_id=418213542 node_paths=PackedStringArray("white_team", "black_team", "white_captured_container", "black_captured_container", "white_time_label", "black_time_label") instance=ExtResource("1_w2twt")]
 position = Vector2(238.75, -242)
 scale = Vector2(0.60205084, 0.6191407)
 white_team = NodePath("../CanvasLayer/WhiteContainer")
 black_team = NodePath("../CanvasLayer/BlackContainer")
+white_captured_container = NodePath("../CanvasLayer/White Capture")
+black_captured_container = NodePath("../CanvasLayer/Black Capture")
+white_time_label = NodePath("../CanvasLayer/White_Timer")
+black_time_label = NodePath("../CanvasLayer/Black_Timer")
 
 [node name="GameOverCanvas" type="CanvasLayer" parent="." unique_id=1962745749]
 
@@ -149,6 +153,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="CanvasLayer/WhiteContainer" unique_id=2146091546]
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 10
 
@@ -199,6 +204,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="CanvasLayer/BlackContainer" unique_id=1904723117]
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 10
 
@@ -239,6 +245,47 @@ theme_override_styles/pressed = SubResource("StyleBoxTexture_k6f3i")
 theme_override_styles/hover = SubResource("StyleBoxTexture_xdqt8")
 theme_override_styles/disabled = SubResource("StyleBoxEmpty_4w45t")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_r6p65")
+
+[node name="White_Timer" type="Label" parent="CanvasLayer" unique_id=2043099740]
+anchors_preset = -1
+anchor_left = 0.056
+anchor_top = 0.90200007
+anchor_right = 0.056
+anchor_bottom = 0.90200007
+offset_left = -36.0
+offset_top = -19.800049
+offset_right = 600.0
+offset_bottom = 288.19995
+theme_override_font_sizes/font_size = 150
+
+[node name="Black_Timer" type="Label" parent="CanvasLayer" unique_id=1651443555]
+offset_left = 59.0
+offset_top = 10.0
+offset_right = 585.0
+offset_bottom = 222.0
+theme_override_font_sizes/font_size = 150
+
+[node name="White Capture" type="GridContainer" parent="CanvasLayer" unique_id=655341707]
+anchors_preset = -1
+anchor_left = 0.404
+anchor_top = 0.020000001
+anchor_right = 0.404
+anchor_bottom = 0.020000001
+offset_right = 639.0
+offset_bottom = 195.0
+columns = 8
+
+[node name="Black Capture" type="GridContainer" parent="CanvasLayer" unique_id=499095697]
+anchors_preset = -1
+anchor_left = 0.40500003
+anchor_top = 0.901
+anchor_right = 0.40500003
+anchor_bottom = 0.901
+offset_left = 0.99993896
+offset_top = -7.4001465
+offset_right = 1048.0
+offset_bottom = 188.59985
+columns = 8
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=892715809]
 position = Vector2(240, -240)

@@ -1,5 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1777786686
+::res://::1778114843
 hola.txt::TextFile::-1::1777785675::0::1::::<><><>0<>0<><>::
 icon.svg::CompressedTexture2D::8328791975833592207::1777754823::1777756292::1::::<><><>0<>0<>f00e863d2458332e71a43ab2910bd028<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 README.md::TextFile::-1::1777754823::0::1::::<><><>0<>0<><>::
@@ -27,13 +27,15 @@ queen_01.png::CompressedTexture2D::7267282853199878596::1777754823::1777756292::
 ::res://assets/pieces/rook/::1777756292
 rook_00.png::CompressedTexture2D::7469972828310734735::1777754823::1777756292::1::::<><><>0<>0<>00dc5af36c33b261bdf600e18211f0aa<>res://.godot/imported/rook_00.png-a9433abad34ba8ba49b4a28b8bcc2ade.ctex::
 rook_01.png::CompressedTexture2D::6504926445306860747::1777754823::1777756292::1::::<><><>0<>0<>a7ca8d5f06917b9edc03aa60237c05ac<>res://.godot/imported/rook_01.png-10d60e8487ac6c81270643b97da30696.ctex::
-::res://scenes/::1777785675
+::res://scenes/::1777790092
 board_scene.tscn::PackedScene::7258567033847598716::1777754823::0::1::::<><><>0<>0<><>::uid://c6wvhf7e5p0c0::::res://assets/chest_table.png<>uid://u0m1a56losan::::res://scripts/board.gd
 dot_placeholder.tscn::PackedScene::3699798422169079349::1777754823::0::1::::<><><>0<>0<><>::uid://dm0ciaw1820pb::::res://scripts/dot_placeholder.gd
+MainMenu.tscn::PackedScene::2314432246670771000::1777790092::0::1::::<><><>0<>0<><>::uid://cwl0tmw51ntkq::::res://scripts/MainMenu.gd
 main_scene.tscn::PackedScene::8990712641567468917::1777785675::0::1::::<><><>0<>0<><>::uid://dbodsktp33dui::::res://scenes/board_scene.tscn<>uid://deormjo5nssbf::::res://assets/pieces/rook/rook_00.png<>uid://crs2y6o4qs20p::::res://assets/pieces/queen/queen_00.png<>uid://bak8n4xhpr2d::::res://assets/pieces/bishop/bishop_00.png<>uid://stie32imbis0::::res://assets/pieces/knight/knight_00.png<>uid://cyxbgnr6047m2::::res://assets/pieces/rook/rook_01.png<>uid://dbslc7mytno1a::::res://assets/pieces/queen/queen_01.png<>uid://bv0blabd17e3g::::res://assets/pieces/bishop/bishop_01.png<>uid://cwx6is0n776fi::::res://assets/pieces/knight/knight_01.png
 texture_placeholder.tscn::PackedScene::4751750394374391539::1777754823::0::1::::<><><>0<>0<><>::
-::res://scripts/::1777785675
-board.gd::GDScript::1456161398934768341::1777756288::0::1::::<>Sprite2D<><>0<>0<><>::
+::res://scripts/::1777790092
+board.gd::GDScript::1456161398934768341::1777790092::0::1::::<>Sprite2D<><>0<>0<><>::
 constants.gd::GDScript::5231271281137994610::1777756288::0::1::::Constants<>RefCounted<><>0<>0<><>::
 dot_placeholder.gd::GDScript::8053273374136166155::1777754823::0::1::::DotPlaceholder<>ColorRect<><>0<>0<><>::
+MainMenu.gd::GDScript::6341256603285166328::1777789631::0::1::::<>Control<><>0<>0<><>::
 NetworkManager.gd::GDScript::2589800961712168606::1777785675::0::1::::<>Node<><>0<>0<><>::

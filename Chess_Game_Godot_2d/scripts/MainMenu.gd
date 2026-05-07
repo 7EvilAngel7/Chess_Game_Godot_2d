@@ -2,12 +2,12 @@ extends Control
 
 @onready var host_button: Button = $VBoxContainer/HostButton
 @onready var join_button: Button = $VBoxContainer/JoinButton
-
+@onready var ip_input: LineEdit = $VBoxContainer/IpInput
 
 func _ready() -> void:
 	host_button.text = "Crear partida"
 	join_button.text = "Unirse"
-
+	ip_input.placeholder_text = "IP del host"
 
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(_on_join_pressed)
@@ -20,7 +20,7 @@ func _on_host_pressed() -> void:
 
 
 func _on_join_pressed() -> void:
-	var ip = "127.0.0.1"
+	var ip = ip_input.text.strip_edges()
 
 	if ip == "":
 		ip = "127.0.0.1"
