@@ -1,27 +1,25 @@
 extends Node
 
-signal connected_ok
 signal connection_failed
-signal player_assigned
+signal start_match
 
-const PORT := 7000
-const MAX_PLAYERS := 2
+const PORT := 8910
+const MAX_CLIENTS := 1
 
-var peer := ENetMultiplayerPeer.new()
+var peer: ENetMultiplayerPeer
 
 # 1 = blancas, -1 = negras
 var my_color: int = 0
-
-# Guarda colores por peer_id
 var player_colors := {}
 
 func host_game() -> void:
 	peer = ENetMultiplayerPeer.new()
 
-	var error = peer.create_server(PORT, MAX_PLAYERS)
+	var error := peer.create_server(PORT, MAX_CLIENTS)
 
 	if error != OK:
-		print("Error al crear servidor: ", error)
+		print("ERROR al crear servidor. Código: ", error)
+		print("Puede que el puerto esté ocupado: ", PORT)
 		return
 
 	multiplayer.multiplayer_peer = peer
@@ -36,18 +34,17 @@ func host_game() -> void:
 	if not multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 
-	print("Servidor creado correctamente en puerto ", PORT)
-	print("Eres blancas.")
-	player_assigned.emit()
+	print("Servidor creado correctamente.")
+	print("Eres blancas. Esperando jugador negro...")
 
 
 func join_game(ip: String) -> void:
 	peer = ENetMultiplayerPeer.new()
 
-	var error = peer.create_client(ip, PORT)
+	var error := peer.create_client(ip, PORT)
 
 	if error != OK:
-		print("Error al crear cliente: ", error)
+		print("ERROR al crear cliente. Código: ", error)
 		connection_failed.emit()
 		return
 
@@ -62,15 +59,19 @@ func join_game(ip: String) -> void:
 	if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
 		multiplayer.server_disconnected.connect(_on_server_disconnected)
 
-	print("Intentando conectar a ", ip, ":", PORT)
+	print("Intentando conectar a: ", ip, ":", PORT)
 
 
 func _on_peer_connected(id: int) -> void:
-	print("Jugador conectado con ID: ", id)
+	print("Cliente conectado con ID: ", id)
 
 	player_colors[id] = -1
 
+	print("Asignando negras al cliente...")
 	assign_color.rpc_id(id, -1)
+
+	print("Iniciando partida para ambos jugadores...")
+	start_game.rpc()
 
 
 func _on_peer_disconnected(id: int) -> void:
@@ -81,17 +82,16 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _on_connected_to_server() -> void:
-	print("Conectado al servidor.")
-	connected_ok.emit()
+	print("Cliente conectado al servidor. Esperando asignación de color...")
 
 
 func _on_connection_failed() -> void:
-	print("No se pudo conectar al servidor.")
+	print("Falló la conexión.")
 	connection_failed.emit()
 
 
 func _on_server_disconnected() -> void:
-	print("El servidor se desconectó.")
+	print("Servidor desconectado.")
 
 
 @rpc("authority", "reliable")
@@ -99,8 +99,12 @@ func assign_color(color: int) -> void:
 	my_color = color
 
 	if my_color == 1:
-		print("Eres blancas.")
-	else:
-		print("Eres negras.")
+		print("Soy blancas.")
+	elif my_color == -1:
+		print("Soy negras.")
 
-	player_assigned.emit()
+
+@rpc("authority", "call_local", "reliable")
+func start_game() -> void:
+	print("START GAME recibido. Color: ", my_color)
+	start_match.emit()

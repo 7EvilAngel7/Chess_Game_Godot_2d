@@ -1,3 +1,4 @@
 res://scenes/MainMenu.tscn
 res://scripts/MainMenu.gd
 res://scripts/NetworkManager.gd
+res://scripts/board.gd

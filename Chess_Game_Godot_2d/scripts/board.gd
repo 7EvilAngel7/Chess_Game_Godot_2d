@@ -65,11 +65,12 @@ func can_play_local_turn() -> bool:
 	if not online_mode:
 		return true
 
-	# Blancas
+	if NetworkManager.my_color == 0:
+		return false
+
 	if is_white and NetworkManager.my_color == 1:
 		return true
 
-	# Negras
 	if not is_white and NetworkManager.my_color == -1:
 		return true
 
