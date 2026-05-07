@@ -12,7 +12,11 @@ func _ready() -> void:
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(_on_join_pressed)
 
-	NetworkManager.player_assigned.connect(_on_player_assigned)
+	if not NetworkManager.player_assigned.is_connected(_on_player_assigned):
+		NetworkManager.player_assigned.connect(_on_player_assigned)
+
+	if not NetworkManager.connection_failed.is_connected(_on_connection_failed):
+		NetworkManager.connection_failed.connect(_on_connection_failed)
 
 
 func _on_host_pressed() -> void:
@@ -29,4 +33,9 @@ func _on_join_pressed() -> void:
 
 
 func _on_player_assigned() -> void:
+	print("Entrando a la escena del juego...")
 	get_tree().change_scene_to_file("res://scenes/main/Game.tscn")
+
+
+func _on_connection_failed() -> void:
+	print("No se pudo conectar. Revisa la IP o el firewall.")
